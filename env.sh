@@ -1,3 +1,4 @@
+mkdir -p /mnt/tmp/.cache/LMUData
 uv venv --seed --python 3.10
 source .venv/bin/activate
 
