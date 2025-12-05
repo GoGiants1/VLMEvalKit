@@ -144,35 +144,95 @@ def infer_data(model, model_name, work_dir, dataset, out_file, verbose=False, ap
     else:
         model.set_dump_image(dataset.dump_image)
 
-    for i in tqdm(range(lt), desc=f'Infer {model_name}/{dataset_name}, Rank {rank}/{world_size}'):
-        idx = data.iloc[i]['index']
-        if idx in res:
-            continue
+    batch_size = getattr(model, 'batch_size', 1)
+    try:
+        batch_size = int(batch_size)
+    except Exception:
+        batch_size = 1
+    if batch_size < 1:
+        batch_size = 1
 
-        if hasattr(model, 'use_custom_prompt') and model.use_custom_prompt(dataset_name):
-            struct = model.build_prompt(data.iloc[i], dataset=dataset_name)
-        else:
-            struct = dataset.build_prompt(data.iloc[i])
+    batch_func = getattr(model, 'generate_batch', None)
+    use_batch = callable(batch_func) and batch_size > 1
 
-        # If `SKIP_ERR` flag is set, the model will skip the generation if error is encountered
-        if os.environ.get('SKIP_ERR', False) == '1':
-            FAIL_MSG = 'Failed to obtain answer'
-            try:
+    if use_batch:
+        processed = 0
+        for start in tqdm(
+            range(0, lt, batch_size),
+            desc=f'Infer {model_name}/{dataset_name}, Rank {rank}/{world_size}',
+        ):
+            rows = data.iloc[start:start + batch_size]
+            batch_indices, batch_structs = [], []
+            for _, row in rows.iterrows():
+                idx = row['index']
+                if idx in res:
+                    continue
+                if hasattr(model, 'use_custom_prompt') and model.use_custom_prompt(dataset_name):
+                    struct = model.build_prompt(row, dataset=dataset_name)
+                else:
+                    struct = dataset.build_prompt(row)
+                batch_indices.append(idx)
+                batch_structs.append(struct)
+
+            if not batch_indices:
+                continue
+
+            if os.environ.get('SKIP_ERR', False) == '1':
+                FAIL_MSG = 'Failed to obtain answer'
+                try:
+                    responses = batch_func(batch_structs, dataset=dataset_name)
+                except RuntimeError as err:
+                    torch.cuda.synchronize()
+                    warnings.warn(f'{type(err)} {str(err)}')
+                    responses = [f'{FAIL_MSG}: {type(err)} {str(err)}'] * len(batch_indices)
+            else:
+                responses = batch_func(batch_structs, dataset=dataset_name)
+
+            if len(responses) != len(batch_indices):
+                warnings.warn(
+                    f'generate_batch returned {len(responses)} responses for {len(batch_indices)} prompts; '
+                    'truncating to the shortest length.'
+                )
+
+            for idx, response in zip(batch_indices, responses):
+                if verbose:
+                    print(response, flush=True)
+                res[idx] = response
+            processed += len(responses)
+            torch.cuda.empty_cache()
+
+            if processed % 10 == 0:
+                dump(res, out_file)
+    else:
+        for i in tqdm(range(lt), desc=f'Infer {model_name}/{dataset_name}, Rank {rank}/{world_size}'):
+            idx = data.iloc[i]['index']
+            if idx in res:
+                continue
+
+            if hasattr(model, 'use_custom_prompt') and model.use_custom_prompt(dataset_name):
+                struct = model.build_prompt(data.iloc[i], dataset=dataset_name)
+            else:
+                struct = dataset.build_prompt(data.iloc[i])
+
+            # If `SKIP_ERR` flag is set, the model will skip the generation if error is encountered
+            if os.environ.get('SKIP_ERR', False) == '1':
+                FAIL_MSG = 'Failed to obtain answer'
+                try:
+                    response = model.generate(message=struct, dataset=dataset_name)
+                except RuntimeError as err:
+                    torch.cuda.synchronize()
+                    warnings.warn(f'{type(err)} {str(err)}')
+                    response = f'{FAIL_MSG}: {type(err)} {str(err)}'
+            else:
                 response = model.generate(message=struct, dataset=dataset_name)
-            except RuntimeError as err:
-                torch.cuda.synchronize()
-                warnings.warn(f'{type(err)} {str(err)}')
-                response = f'{FAIL_MSG}: {type(err)} {str(err)}'
-        else:
-            response = model.generate(message=struct, dataset=dataset_name)
-        torch.cuda.empty_cache()
+            torch.cuda.empty_cache()
 
-        if verbose:
-            print(response, flush=True)
+            if verbose:
+                print(response, flush=True)
 
-        res[idx] = response
-        if (i + 1) % 10 == 0:
-            dump(res, out_file)
+            res[idx] = response
+            if (i + 1) % 10 == 0:
+                dump(res, out_file)
 
     res = {k: res[k] for k in data_indices}
     dump(res, out_file)
