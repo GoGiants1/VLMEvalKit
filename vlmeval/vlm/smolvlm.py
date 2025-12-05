@@ -1,36 +1,78 @@
-import torch
 import os.path as osp
 import warnings
-from .base import BaseModel
-from ..smp import splitlen
+from typing import Iterable, List, Optional, Sequence
+
+import torch
 from PIL import Image
 
-import os
-import math
+from ..smp import splitlen
+from .base import BaseModel
 
 
 class SmolVLM(BaseModel):
     INSTALL_REQ = True
     INTERLEAVE = True
 
-    def __init__(self, model_path="HuggingFaceTB/SmolVLM-Instruct", **kwargs):
+    def __init__(
+        self,
+        model_path="HuggingFaceTB/SmolVLM-Instruct",
+        batch_size: int = 1,
+        **kwargs,
+    ):
         from transformers import AutoProcessor, Idefics3ForConditionalGeneration
 
         assert osp.exists(model_path) or splitlen(model_path) == 2
 
+        batch_size = kwargs.pop("batch_size", batch_size)
         self.processor = AutoProcessor.from_pretrained(model_path)
+        if hasattr(self.processor, "tokenizer"):
+            # Decoder-only generation expects left padding
+            self.processor.tokenizer.padding_side = "left"
         self.model = Idefics3ForConditionalGeneration.from_pretrained(
             model_path, torch_dtype=torch.float32, device_map="cuda"
         )
         kwargs_default = {"max_new_tokens": 2048, "use_cache": True}
         kwargs_default.update(kwargs)
         self.kwargs = kwargs_default
+        self.batch_size = max(1, int(batch_size))
         warnings.warn(
             f"Following kwargs received: {self.kwargs}, will use as generation config."
         )
         torch.cuda.empty_cache()
 
     def generate_inner(self, message, dataset=None):
+        prompts, images = self._prepare_batch_inputs([message], dataset)
+        inputs = self._prepare_inputs(prompts, images)
+        generated_ids = self.model.generate(**inputs, **self.kwargs)
+        return self._decode_generations(inputs, generated_ids)[0]
+
+    def generate_batch(self, messages: Sequence, dataset=None) -> List[str]:
+        prompts, images = self._prepare_batch_inputs(messages, dataset)
+        if not prompts:
+            return []
+        if len(prompts) > self.batch_size:
+            warnings.warn(
+                f"Requested batch of {len(prompts)} exceeds configured batch_size={self.batch_size}; "
+                "continuing anyway."
+            )
+        inputs = self._prepare_inputs(prompts, images)
+        generated_ids = self.model.generate(**inputs, **self.kwargs)
+        return self._decode_generations(inputs, generated_ids)
+
+    def _prepare_batch_inputs(
+        self, messages: Iterable[Sequence], dataset: Optional[str]
+    ) -> tuple[list[str], list[list[Image.Image]]]:
+        prompts: list[str] = []
+        images: list[list[Image.Image]] = []
+        for msg in messages:
+            prompt, imgs = self._format_prompt_and_images(msg, dataset)
+            prompts.append(prompt)
+            images.append(imgs)
+        return prompts, images
+
+    def _format_prompt_and_images(
+        self, message, dataset: Optional[str]
+    ) -> tuple[str, list[Image.Image]]:
         if dataset in [
             "MMBench_DEV_EN",
             "MMBench_TEST_EN",
@@ -84,22 +126,29 @@ class SmolVLM(BaseModel):
         else:
             formatted_messages, formatted_images = self.build_prompt_default(message)
 
-        images = (
-            [formatted_images]
-            if isinstance(formatted_images, Image.Image)
-            else formatted_images
-        )
+        if isinstance(formatted_images, Image.Image):
+            images = [formatted_images]
+        elif formatted_images is None:
+            images = []
+        else:
+            images = formatted_images
+        return formatted_messages, images
+
+    def _prepare_inputs(
+        self, prompts: list[str], images: list[list[Image.Image]]
+    ) -> dict[str, torch.Tensor]:
         inputs = self.processor(
-            text=formatted_messages, images=images, return_tensors="pt"
+            text=prompts, images=images, padding=True, return_tensors="pt"
         )
-        inputs = {k: v.to(self.model.device) for k, v in inputs.items()}
+        return {k: v.to(self.model.device) for k, v in inputs.items()}
 
-        generated_ids = self.model.generate(**inputs, **self.kwargs)
+    def _decode_generations(
+        self, inputs: dict[str, torch.Tensor], generated_ids: torch.Tensor
+    ) -> List[str]:
         generated_text = self.processor.batch_decode(
-            generated_ids[:, inputs["input_ids"].size(1):], skip_special_tokens=True
-        )[0]
-
-        return generated_text.strip()
+            generated_ids[:, inputs["input_ids"].size(1) :], skip_special_tokens=True
+        )
+        return [text.strip() for text in generated_text]
 
     def build_prompt_default(self, message, add_brief=False, add_yes_or_no=False):
         from transformers.image_utils import load_image
@@ -345,7 +394,7 @@ class SmolVLM(BaseModel):
 
         generated_ids = self.model.generate(**inputs, **self.kwargs)
         generated_text = self.processor.batch_decode(
-            generated_ids[:, inputs["input_ids"].size(1):], skip_special_tokens=True
+            generated_ids[:, inputs["input_ids"].size(1) :], skip_special_tokens=True
         )[0]
 
         return generated_text.strip()
@@ -356,8 +405,8 @@ class SmolVLM2(BaseModel):
     INTERLEAVE = True
 
     def __init__(self, model_path="HuggingFaceTB/SmolVLM2-2.2B-Instruct", **kwargs):
-        from transformers import AutoProcessor, AutoModelForImageTextToText
         import torch
+        from transformers import AutoModelForImageTextToText, AutoProcessor
 
         assert osp.exists(model_path) or splitlen(model_path) == 2
 
@@ -371,6 +420,9 @@ class SmolVLM2(BaseModel):
             raise ValueError(f"Unknown model {model_path}, cannot determine resolution")
 
         self.processor = AutoProcessor.from_pretrained(model_path)
+        if hasattr(self.processor, "tokenizer"):
+            # Decoder-only generation expects left padding
+            self.processor.tokenizer.padding_side = "left"
         self.model = AutoModelForImageTextToText.from_pretrained(
             model_path,
             torch_dtype=torch.float32,
@@ -472,7 +524,7 @@ class SmolVLM2(BaseModel):
 
         # Decode only the new tokens, not the entire sequence
         generated_text = self.processor.batch_decode(
-            generated_ids[:, inputs["input_ids"].size(1):], skip_special_tokens=True
+            generated_ids[:, inputs["input_ids"].size(1) :], skip_special_tokens=True
         )[0]
 
         return generated_text.strip()
@@ -504,8 +556,8 @@ class SmolVLM2(BaseModel):
     def build_prompt_video(self, message, dataset, add_timestamps=True):
         """Build prompt for video datasets with frame sampling"""
         import numpy as np
-        from transformers.image_utils import load_image
         from PIL import Image
+        from transformers.image_utils import load_image
 
         # Configure processor for video frames
         self.processor.image_processor.size = {"longest_edge": self.resolution}
@@ -863,7 +915,7 @@ class SmolVLM2(BaseModel):
 
         # Decode only the new tokens, not the entire sequence
         generated_text = self.processor.batch_decode(
-            generated_ids[:, inputs["input_ids"].size(1):], skip_special_tokens=True
+            generated_ids[:, inputs["input_ids"].size(1) :], skip_special_tokens=True
         )[0]
 
         return generated_text.strip()
