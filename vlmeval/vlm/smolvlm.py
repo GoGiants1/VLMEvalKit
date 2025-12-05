@@ -25,7 +25,7 @@ class SmolVLM(BaseModel):
 
         batch_size = kwargs.pop("batch_size", batch_size)
         self.processor = AutoProcessor.from_pretrained(model_path)
-        if hasattr(self.processor, "tokenizer"):
+        if hasattr(self.processor, "tokenizer") and batch_size > 1:
             # Decoder-only generation expects left padding
             self.processor.tokenizer.padding_side = "left"
         self.model = Idefics3ForConditionalGeneration.from_pretrained(
@@ -404,7 +404,12 @@ class SmolVLM2(BaseModel):
     INSTALL_REQ = True
     INTERLEAVE = True
 
-    def __init__(self, model_path="HuggingFaceTB/SmolVLM2-2.2B-Instruct", **kwargs):
+    def __init__(
+        self,
+        model_path="HuggingFaceTB/SmolVLM2-2.2B-Instruct",
+        batch_size: int = 1,
+        **kwargs,
+    ):
         import torch
         from transformers import AutoModelForImageTextToText, AutoProcessor
 
@@ -418,9 +423,9 @@ class SmolVLM2(BaseModel):
             self.resolution = 512
         else:
             raise ValueError(f"Unknown model {model_path}, cannot determine resolution")
-
+        batch_size = kwargs.pop("batch_size", 1)
         self.processor = AutoProcessor.from_pretrained(model_path)
-        if hasattr(self.processor, "tokenizer"):
+        if hasattr(self.processor, "tokenizer") and batch_size > 1:
             # Decoder-only generation expects left padding
             self.processor.tokenizer.padding_side = "left"
         self.model = AutoModelForImageTextToText.from_pretrained(
