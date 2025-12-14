@@ -6,8 +6,10 @@ from typing import Iterable, List, Optional, Sequence
 import torch
 from PIL import Image
 
-from ..smp import splitlen
+from ..smp import get_logger, splitlen
 from .base import BaseModel
+
+logger = get_logger("SmolVLM")
 
 
 def _select_torch_dtype() -> torch.dtype:
@@ -18,8 +20,13 @@ def _select_torch_dtype() -> torch.dtype:
 
     major, _ = torch.cuda.get_device_capability(torch.cuda.current_device())
     flash_attn_available = importlib.util.find_spec("flash_attn") is not None
+
     if major >= 8 and flash_attn_available:
+        logger.info(
+            "Using torch.bfloat16 dtype (Ampere+ GPU with flash-attn detected)."
+        )
         return torch.bfloat16
+    logger.info("Using torch.float16 dtype.")
     return torch.float16
 
 
@@ -62,17 +69,52 @@ class SmolVLM(BaseModel):
         return self._decode_generations(inputs, generated_ids)[0]
 
     def generate_batch(self, messages: Sequence, dataset=None) -> List[str]:
-        prompts, images = self._prepare_batch_inputs(messages, dataset)
-        if not prompts:
+        def _is_oom_error(err: Exception) -> bool:
+            if isinstance(err, torch.cuda.OutOfMemoryError):
+                return True
+            return isinstance(err, RuntimeError) and "out of memory" in str(err).lower()
+
+        if not messages:
             return []
-        if len(prompts) > self.batch_size:
+        if len(messages) > self.batch_size:
             warnings.warn(
-                f"Requested batch of {len(prompts)} exceeds configured batch_size={self.batch_size}; "
+                f"Requested batch of {len(messages)} exceeds configured batch_size={self.batch_size}; "
                 "continuing anyway."
             )
-        inputs = self._prepare_inputs(prompts, images)
-        generated_ids = self.model.generate(**inputs, **self.kwargs)
-        return self._decode_generations(inputs, generated_ids)
+
+        outputs: list[str] = []
+        total = len(messages)
+        max_batch = max(1, self.batch_size)
+        idx = 0
+
+        while idx < total:
+            current_bs = min(max_batch, total - idx)
+            while True:
+                batch_messages = messages[idx : idx + current_bs]
+                try:
+                    prompts, images = self._prepare_batch_inputs(
+                        batch_messages, dataset
+                    )
+                    inputs = self._prepare_inputs(prompts, images)
+                    generated_ids = self.model.generate(**inputs, **self.kwargs)
+                    outputs.extend(self._decode_generations(inputs, generated_ids))
+                    break
+                except (RuntimeError, torch.cuda.OutOfMemoryError) as err:
+                    if not _is_oom_error(err):
+                        raise
+                    torch.cuda.empty_cache()
+                    if current_bs == 1:
+                        raise
+                    next_bs = max(1, current_bs // 2)
+                    warnings.warn(
+                        f"SmolVLM OOM at batch_size={current_bs}; retrying with batch_size={next_bs}. "
+                        f"Error: {type(err).__name__}: {err}"
+                    )
+                    current_bs = next_bs
+                    continue
+            idx += current_bs
+
+        return outputs
 
     def _prepare_batch_inputs(
         self, messages: Iterable[Sequence], dataset: Optional[str]
