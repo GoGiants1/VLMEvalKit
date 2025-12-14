@@ -61,6 +61,9 @@ class SmolVLM(BaseModel):
             f"Following kwargs received: {self.kwargs}, will use as generation config."
         )
         torch.cuda.empty_cache()
+        logger.info(
+            f"SmolVLM initialized with {self.model.config.to_dict()},\ngeneration config: {self.model.generation_config.to_dict()},\ngeneration kwargs: {self.kwargs},\nbatch_size={self.batch_size}."
+        )
 
     def generate_inner(self, message, dataset=None):
         prompts, images = self._prepare_batch_inputs([message], dataset)
