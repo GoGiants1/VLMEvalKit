@@ -1,3 +1,4 @@
+import importlib.util
 import os.path as osp
 import warnings
 from typing import Iterable, List, Optional, Sequence
@@ -7,6 +8,19 @@ from PIL import Image
 
 from ..smp import splitlen
 from .base import BaseModel
+
+
+def _select_torch_dtype() -> torch.dtype:
+    """Prefer bf16 on Ampere+ with flash-attn, else fall back to fp16 (fp32 only when CUDA is missing)."""
+    if not torch.cuda.is_available():
+        warnings.warn("CUDA is not available; falling back to torch.float32 on CPU.")
+        return torch.float32
+
+    major, _ = torch.cuda.get_device_capability(torch.cuda.current_device())
+    flash_attn_available = importlib.util.find_spec("flash_attn") is not None
+    if major >= 8 and flash_attn_available:
+        return torch.bfloat16
+    return torch.float16
 
 
 class SmolVLM(BaseModel):
@@ -28,8 +42,9 @@ class SmolVLM(BaseModel):
         if hasattr(self.processor, "tokenizer") and batch_size > 1:
             # Decoder-only generation expects left padding
             self.processor.tokenizer.padding_side = "left"
+        torch_dtype = _select_torch_dtype()
         self.model = Idefics3ForConditionalGeneration.from_pretrained(
-            model_path, torch_dtype=torch.float32, device_map="cuda"
+            model_path, torch_dtype=torch_dtype, device_map="cuda"
         )
         kwargs_default = {"max_new_tokens": 2048, "use_cache": True}
         kwargs_default.update(kwargs)
@@ -428,9 +443,10 @@ class SmolVLM2(BaseModel):
         if hasattr(self.processor, "tokenizer") and batch_size > 1:
             # Decoder-only generation expects left padding
             self.processor.tokenizer.padding_side = "left"
+        torch_dtype = _select_torch_dtype()
         self.model = AutoModelForImageTextToText.from_pretrained(
             model_path,
-            torch_dtype=torch.float32,
+            torch_dtype=torch_dtype,
         ).to("cuda")
 
         kwargs_default = {"max_new_tokens": 2048, "do_sample": False, "use_cache": True}
