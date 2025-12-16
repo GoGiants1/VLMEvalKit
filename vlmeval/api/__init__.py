@@ -24,6 +24,7 @@ from .mug_u import MUGUAPI
 from .kimivl_api import KimiVLAPIWrapper, KimiVLAPI
 from .rbdashmm_chat3_api import RBdashMMChat3_API, RBdashChat3_5_API
 from .rbdashmm_chat3_5_api import RBdashMMChat3_78B_API, RBdashMMChat3_5_38B_API
+from .smolvlm_api import SmolVLMAPIWrapper, SmolVLMAPI
 
 __all__ = [
     'OpenAIWrapper', 'HFChatModel', 'GeminiWrapper', 'GPT4V', 'Gemini',
@@ -33,5 +34,5 @@ __all__ = [
     'bailingMMAPI', 'TaiyiAPI', 'TeleMMAPI', 'SiliconFlowAPI', 'LMDeployAPI', 'ARM_thinker',
     'TaichuVLAPI', 'TaichuVLRAPI', 'DoubaoVL', "MUGUAPI", 'KimiVLAPIWrapper', 'KimiVLAPI',
     'RBdashMMChat3_API', 'RBdashChat3_5_API', 'RBdashMMChat3_78B_API', 'RBdashMMChat3_5_38B_API',
-    'VideoChatOnlineV2API'
+    'VideoChatOnlineV2API', 'SmolVLMAPIWrapper', 'SmolVLMAPI'
 ]

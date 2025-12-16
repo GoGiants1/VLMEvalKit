@@ -49,6 +49,25 @@ To infer with API models (GPT-4v, Gemini-Pro-V, etc.) or use LLM APIs as the **j
   EVAL_PROXY=
   ```
 
+- **SmolVLM over vLLM/OpenAI endpoint.**
+
+  If you launch SmolVLM with `vllm serve` (for example via `projects/smolvlm/scripts/eval/eval_vllm.sh`), set:
+
+  ```bash
+  # Optional auth; omit if your endpoint does not require a key
+  SMOLVLM_API_KEY=
+  # OpenAI-compatible endpoint (falls back to LMDEPLOY_API_BASE or http://localhost:23333/v1/chat/completions)
+  SMOLVLM_API_BASE=http://127.0.0.1:23333/v1/chat/completions
+  # Served model name exposed by vLLM (defaults to "smolvlm" if unset)
+  SMOLVLM_API_MODEL=HuggingFaceTB/SmolVLM-256M-Base
+  ```
+
+  Then run with `--model SmolVLM-API`:
+
+  ```bash
+  python run.py --data MMBench_DEV_EN --model SmolVLM-API --mode infer --api-nproc 8
+  ```
+
 - Fill the blanks with your API keys (if necessary). Those API keys will be automatically loaded when doing the inference and evaluation.
 ## Step 1. Configuration
 

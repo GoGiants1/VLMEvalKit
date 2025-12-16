@@ -539,6 +539,16 @@ api_models = {
         retry=10,
         timeout=300,
     ),
+    "SmolVLM-API": partial(
+        SmolVLMAPI,
+        model=os.environ.get("SMOLVLM_API_MODEL", "smolvlm"),
+        api_base=os.environ.get(
+            "SMOLVLM_API_BASE",
+            os.environ.get("LMDEPLOY_API_BASE", "http://localhost:23333/v1/chat/completions"),
+        ),
+        temperature=0,
+        retry=5,
+    ),
     'Taichu-VLR-3B': partial(
         TaichuVLRAPI, 
         model='taichu_vlr_3b', 
