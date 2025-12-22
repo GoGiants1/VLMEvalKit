@@ -122,12 +122,14 @@ class SmolVLMAPIWrapper(BaseAPI):
         if self.key:
             headers["Authorization"] = f"Bearer {self.key}"
 
+        stop_token_ids = [0, 2, 49191]  # <endoftext>, <|im_end|>, <end_of_utterance>
         payload: Dict[str, Any] = dict(
             model=self.model,
             messages=input_msgs,
             n=1,
             temperature=temperature,
             max_tokens=max_tokens,
+            stop_token_ids=stop_token_ids,
             **kwargs,
         )
 
