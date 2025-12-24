@@ -42,3 +42,5 @@ transformers
 typing_extensions
 validators
 xlsxwriter
+latex2sympy2
+pycocoevalcap
