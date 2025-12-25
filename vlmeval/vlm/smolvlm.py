@@ -11,6 +11,64 @@ from .base import BaseModel
 
 logger = get_logger("SmolVLM")
 
+MMBENCH_DATASETS = {
+    "MMBench_DEV_EN",
+    "MMBench_TEST_EN",
+    "MMBench_DEV_CN",
+    "MMBench_TEST_CN",
+    "MMBench",
+    "MMBench_CN",
+    "MMBench_DEV_EN_V11",
+    "MMBench_DEV_CN_V11",
+    "MMBench_TEST_EN_V11",
+    "MMBench_TEST_CN_V11",
+    "MMBench_V11",
+    "MMBench_CN_V11",
+    "CCBench",
+}
+
+MMMU_DATASETS = {"MMMU_DEV_VAL", "MMMU_TEST"}
+MATHVISTA_DATASETS = {"MathVista_MINI"}
+CHARTQA_DATASETS = {"ChartQA_TEST"}
+DOCVQA_DATASETS = {"DocVQA_VAL", "DocVQA_TEST"}
+TEXTVQA_DATASETS = {"TextVQA_VAL", "TextVQA_TEST"}
+
+BRIEF_ANSWER_DATASETS = {
+    "MMVet",
+    "OCRVQA_TEST",
+    "OCRVQA_TESTCORE",
+    "InfoVQA_VAL",
+    "InfoVQA_TEST",
+    "OCRBench",
+}
+
+YES_NO_DATASETS = {"MME", "HallusionBench", "POPE", "AMBER", "VSR-zeroshot"}
+
+PUREMCQ_DATASETS = {
+    "MMStar",
+    "SEEDBench_IMG",
+    "AI2D_TEST",
+    "ScienceQA_VAL",
+    "ScienceQA_TEST",
+    "MMSci_DEV_MCQ",
+    "RealWorldQA",
+}
+
+VIDEO_DATASETS = {
+    "MMBench-Video",
+    "MLVU",
+    "MLVU_MCQ",
+    "MLVU_OpenEnded",
+    "TempCompass",
+    "TempCompass_MCQ",
+    "TempCompass_Captioning",
+    "TempCompass_YorN",
+    "MVBench",
+    "MVBench_MP4",
+    "Video-MME",
+    "LongVideoBench",
+}
+
 
 def _select_torch_dtype() -> torch.dtype:
     """Prefer bf16 on Ampere+ with flash-attn, else fall back to fp16 (fp32 only when CUDA is missing)."""
@@ -133,55 +191,27 @@ class SmolVLM(BaseModel):
     def _format_prompt_and_images(
         self, message, dataset: Optional[str]
     ) -> tuple[str, list[Image.Image]]:
-        if dataset in [
-            "MMBench_DEV_EN",
-            "MMBench_TEST_EN",
-            "MMBench_DEV_CN",
-            "MMBench_TEST_CN",
-            "MMBench",
-            "MMBench_CN",
-            "MMBench_DEV_EN_V11",
-            "MMBench_DEV_CN_V11",
-            "MMBench_TEST_EN_V11",
-            "MMBench_TEST_CN_V11",
-            "MMBench_V11",
-            "MMBench_CN_V11",
-            "CCBench",
-        ]:
+        if dataset in MMBENCH_DATASETS:
             formatted_messages, formatted_images = self.build_prompt_mmbench(message)
-        elif dataset in ["MMMU_DEV_VAL", "MMMU_TEST"]:
+        elif dataset in MMMU_DATASETS:
             formatted_messages, formatted_images = self.build_prompt_mmmu(message)
-        elif dataset in ["MathVista_MINI"]:
+        elif dataset in MATHVISTA_DATASETS:
             formatted_messages, formatted_images = self.build_prompt_mathvista(message)
-        elif dataset in ["ChartQA_TEST"]:
+        elif dataset in CHARTQA_DATASETS:
             formatted_messages, formatted_images = self.build_prompt_chartqa(message)
-        elif dataset in ["DocVQA_VAL", "DocVQA_TEST"]:
+        elif dataset in DOCVQA_DATASETS:
             formatted_messages, formatted_images = self.build_prompt_docvqa(message)
-        elif dataset in ["TextVQA_VAL", "TextVQA_TEST"]:
+        elif dataset in TEXTVQA_DATASETS:
             formatted_messages, formatted_images = self.build_prompt_textvqa(message)
-        elif dataset in [
-            "MME",
-            "MMVet",
-            "OCRVQA_TEST",
-            "OCRVQA_TESTCORE",
-            "InfoVQA_VAL",
-            "InfoVQA_TEST",
-            "OCRBench",
-        ]:
+        elif dataset in BRIEF_ANSWER_DATASETS:
             formatted_messages, formatted_images = self.build_prompt_default(
                 message, add_brief=True
             )
-        elif dataset == "HallusionBench":
+        elif dataset in YES_NO_DATASETS:
             formatted_messages, formatted_images = self.build_prompt_default(
                 message, add_yes_or_no=True
             )
-        elif dataset in [
-            "MMStar",
-            "SEEDBench_IMG",
-            "AI2D_TEST",
-            "ScienceQA_VAL",
-            "ScienceQA_TEST",
-        ]:
+        elif dataset in PUREMCQ_DATASETS:
             formatted_messages, formatted_images = self.build_prompt_puremcq(message)
         else:
             formatted_messages, formatted_images = self.build_prompt_default(message)
@@ -503,70 +533,29 @@ class SmolVLM2(BaseModel):
         torch.cuda.empty_cache()
 
     def generate_inner(self, message, dataset=None):
-        if dataset in [
-            "MMBench_DEV_EN",
-            "MMBench_TEST_EN",
-            "MMBench_DEV_CN",
-            "MMBench_TEST_CN",
-            "MMBench",
-            "MMBench_CN",
-            "MMBench_DEV_EN_V11",
-            "MMBench_DEV_CN_V11",
-            "MMBench_TEST_EN_V11",
-            "MMBench_TEST_CN_V11",
-            "MMBench_V11",
-            "MMBench_CN_V11",
-            "CCBench",
-        ]:
+        if dataset in MMBENCH_DATASETS:
             formatted_messages, formatted_images = self.build_prompt_mmbench(message)
-        elif dataset in ["MMMU_DEV_VAL", "MMMU_TEST"]:
+        elif dataset in MMMU_DATASETS:
             formatted_messages, formatted_images = self.build_prompt_mmmu(message)
-        elif dataset in ["MathVista_MINI"]:
+        elif dataset in MATHVISTA_DATASETS:
             formatted_messages, formatted_images = self.build_prompt_mathvista(message)
-        elif dataset in ["ChartQA_TEST"]:
+        elif dataset in CHARTQA_DATASETS:
             formatted_messages, formatted_images = self.build_prompt_chartqa(message)
-        elif dataset in ["DocVQA_VAL", "DocVQA_TEST"]:
+        elif dataset in DOCVQA_DATASETS:
             formatted_messages, formatted_images = self.build_prompt_docvqa(message)
-        elif dataset in ["TextVQA_VAL", "TextVQA_TEST"]:
+        elif dataset in TEXTVQA_DATASETS:
             formatted_messages, formatted_images = self.build_prompt_textvqa(message)
-        elif dataset in [
-            "MME",
-            "MMVet",
-            "OCRVQA_TEST",
-            "OCRVQA_TESTCORE",
-            "InfoVQA_VAL",
-            "InfoVQA_TEST",
-            "OCRBench",
-        ]:
+        elif dataset in BRIEF_ANSWER_DATASETS:
             formatted_messages, formatted_images = self.build_prompt_default(
                 message, add_brief=True
             )
-        elif dataset == "HallusionBench":
+        elif dataset in YES_NO_DATASETS:
             formatted_messages, formatted_images = self.build_prompt_default(
                 message, add_yes_or_no=True
             )
-        elif dataset in [
-            "MMStar",
-            "SEEDBench_IMG",
-            "AI2D_TEST",
-            "ScienceQA_VAL",
-            "ScienceQA_TEST",
-        ]:
+        elif dataset in PUREMCQ_DATASETS:
             formatted_messages, formatted_images = self.build_prompt_puremcq(message)
-        elif dataset in [
-            "MMBench-Video",
-            "MLVU",
-            "MLVU_MCQ",
-            "MLVU_OpenEnded",
-            "TempCompass",
-            "TempCompass_MCQ",
-            "TempCompass_Captioning",
-            "TempCompass_YorN",
-            "MVBench",
-            "MVBench_MP4",
-            "Video-MME",
-            "LongVideoBench",
-        ]:
+        elif dataset in VIDEO_DATASETS:
             formatted_messages, formatted_images = self.build_prompt_video(
                 message, dataset
             )

@@ -36,7 +36,6 @@ DOCVQA_DATASETS = {"DocVQA_VAL", "DocVQA_TEST"}
 TEXTVQA_DATASETS = {"TextVQA_VAL", "TextVQA_TEST"}
 
 BRIEF_ANSWER_DATASETS = {
-    "MME",
     "MMVet",
     "OCRVQA_TEST",
     "OCRVQA_TESTCORE",
@@ -45,7 +44,7 @@ BRIEF_ANSWER_DATASETS = {
     "OCRBench",
 }
 
-HALLUSION_DATASETS = {"HallusionBench"}
+YES_NO_DATASETS = {"MME", "HallusionBench", "POPE", "AMBER", "VSR-zeroshot"}
 
 PUREMCQ_DATASETS = {
     "MMStar",
@@ -53,6 +52,8 @@ PUREMCQ_DATASETS = {
     "AI2D_TEST",
     "ScienceQA_VAL",
     "ScienceQA_TEST",
+    "MMSci_DEV_MCQ",
+    "RealWorldQA",
 }
 
 VIDEO_DATASETS = {
@@ -365,7 +366,7 @@ def apply_dataset_prompting(
         instruction += "\nGive a very brief answer."
         return non_text_items + [dict(type="text", value=instruction)]
 
-    if dataset in HALLUSION_DATASETS:
+    if dataset in YES_NO_DATASETS:
         instruction = _concat_text_items(inputs).strip()
         instruction += "\nAnswer yes or no."
         return non_text_items + [dict(type="text", value=instruction)]
