@@ -45,3 +45,4 @@ xlsxwriter
 antlr4-python3-runtime==4.9.3
 latex2sympy2
 pycocoevalcap
+num2words
